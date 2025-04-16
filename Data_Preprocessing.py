@@ -6,11 +6,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import skew
 import warnings
-
+from sklearn.preprocessing import StandardScaler
 
 warnings.filterwarnings('ignore')
 pd.set_option("display.width", 500)
 pd.set_option("display.max_columns", 500)
+pd.set_option('display.float_format', '{:.0f}'.format) # çıktılarda sayıları ondalıklı kısmı olmadan göstermeni sağlar.
+# pd.reset_option('display.float_format') # ondalıklı gösterim için bu kullanılır.
 
 df = pd.read_csv("dataset/car_price.csv")
 df.info()
@@ -77,9 +79,37 @@ def extract_number_fixed(value):
 df['EngineSize'] = df['EngineSize'].apply(extract_number_fixed)
 df['EnginePower'] = df['EnginePower'].apply(extract_number_fixed)
 
+df.info()
 ###########################
 # Edit Variables - Missing Values
 ##########################
+
+def remove_nan_col(dataframe):
+    """
+      Veri setindeki her gözlemdeki (satırdaki) NaN değerlerini sayar ve
+      bir gözlemdeki NaN değerlerinin sayısı sütun sayısının yarısından fazla veya eşitse
+      o gözlemi veri setinden çıkarır.
+
+      Args:
+        df: Pandas DataFrame.
+
+      Returns:
+        new_df: NaN değerleri belirlenen değerden daha az olan verilerin bulunduğu dataframe.
+      """
+    count_col = dataframe.shape[1]
+    thr_value = count_col / 2
+    drop_rows = []
+
+    for index, row in dataframe.iterrows():
+        nan_count = row.isna().sum()
+        if nan_count >= thr_value:
+            drop_rows.append(index)
+
+    new_df = dataframe.drop(drop_rows)
+    return new_df
+
+df = remove_nan_col(df)
+
 
 # BodyType
 list_BodyType = ['Hatchback/5', 'Sedan', 'Coupe', 'Hatchback/3','Roadster','Station wagon','MPV']
@@ -101,10 +131,11 @@ df = df[df["FuelType"].isin(list_FuelType)]
 df['TradeInStatus'].replace('', np.nan, inplace=True)
 df['TradeInStatus'].fillna('Belirtilmemiş', inplace=True)
 
-
 df['SellerType'].replace('', np.nan, inplace=True)
 df['SellerType'].fillna('Belirtilmemiş', inplace=True)
 
+# EngineSize
+df["EngineSize"] = df.groupby("Brand")["EngineSize"].transform(lambda x: x.fillna(x.median()))
 
 
 # VehicleTax() ---> Missing Values
@@ -475,91 +506,16 @@ def fill_missing_mtv(df):
 # Fonksiyonu kullanarak eksik MTV değerlerini doldur
 df = fill_missing_mtv(df)
 
+df.isna().sum()
 df.head()
 df.info()
-
-###########################
-# Feature Extraction
-##########################
-
-# Address ---> Feature Extraction
-df['District'] = df['Address'].str.extract(r'Mh\.\s*(.*)')
-df.drop('Address', axis=1, inplace=True)
-
-
-# ListingDate ---> Feature Extraction
-current_date = datetime.now()
-df['DaysSinceListing'] = (current_date - df['ListingDate']).dt.days
-# df.drop('ListingDate', axis=1, inplace=True)
-
-
-# PaintAndPartsCondition
-parts_list = [
-    "Sağ Ön Kapı", "Sağ Arka Kapı", "Sol Ön Kapı", "Sol Arka Kapı",
-    "Sağ Ön Çamurluk", "Sol Ön Çamurluk", "Sağ Arka Çamurluk", "Sol Arka Çamurluk",
-    "Arka Kaput", "Motor Kaputu", "Tavan", "Ön Tampon", "Arka Tampon"
-]
-def count_parts_by_category(text):
-    categories = ['Orjinal', 'Lokal boyalı', 'Boyalı', 'Değişmiş', 'Belirtilmemiş']
-    result = dict.fromkeys([c + "_Count" for c in categories], 0)
-
-    for i, cat in enumerate(categories):
-        try:
-            start = text.index(cat) + len(cat)
-            end = text.index(categories[i + 1]) if i + 1 < len(categories) else len(text)
-            segment = text[start:end]
-            count = sum(1 for part in parts_list if part in segment)
-            result[cat + "_Count"] = count
-        except ValueError:
-            result[cat + "_Count"] = 0
-
-    return pd.Series(result)
-df[['NumOriginalParts', 'NumLocalPaintedParts', 'NumPaintedParts', 'NumChangedParts', 'NumUnknownParts']] = df['PaintAndPartsCondition'].apply(count_parts_by_category)
-df.drop('PaintAndPartsCondition', axis=1, inplace=True)
-
-
-
-# TramerCondition
-df['TramerCondition'] = df['TramerCondition'].astype(str).str.strip()
-
-def detect_damage(x):
-    if pd.isna(x):  # Gerçek NaN
-        return np.nan
-    x = str(x).strip().lower()
-    if x == 'tutarı yok':
-        return 0
-    elif 'ağır hasar' in x or any(char.isdigit() for char in x):
-        return 1
-    elif 'tutarı belirtilmemiş' in x or x == '' or x == 'nan':
-        return np.nan
-    else:
-        return 1  # Emin olunamayan ama boş olmayan değerler
-df['HasDamage'] = df['TramerCondition'].apply(detect_damage)
-
-df['HasHighDamage'] = df['TramerCondition'].apply(
-    lambda x: 1 if isinstance(x, str) and 'ağır hasar' in x.lower() else 0)
-
-def extract_cost(val):
-    if isinstance(val, str):
-        # Sayı içeriyorsa ayıkla
-        match = re.search(r'\d[\d\.]*', val)
-        if match:
-            return float(match.group(0).replace('.', '').replace(',', '.'))
-    return np.nan
-df['DamageCost'] = df['TramerCondition'].apply(extract_cost)
-df.drop('TramerCondition', axis=1, inplace=True)
-
-df['Year'] = df['Year'].astype(int)
-
-
-
-
+df.shape
 ##############################
 # Outlier
 ##############################
-numerical_cols  = ['DamageCost','VehicleTax()', 'Kilometers', 'Year', 'Price(TL)']
+numerical_cols  = [col for col in df.columns if df[col].dtypes not in ['O', 'datetime64[ns]']]
 
-def outlier_thresholds(dataframe, variable, q1=0.01, q3=0.99):
+def outlier_thresholds(dataframe, variable, q1=0.01, q3=0.98):
     quartile1 = dataframe[variable].quantile(q1)
     quartile3 = dataframe[variable].quantile(q3)
     iqr = quartile3 - quartile1
@@ -623,24 +579,131 @@ plot_numerical_distributions(df,numerical_cols)
 # < -1 → sola çarpık (log dönüşüm düşünülebilinir)
 # -0.5 ile +0.5 arasında → simetrik sayılır, dönüşüm şart değil
 
-# Log dönüşümüü yapılması gereken değişkenler = 'DamageCost','VehicleTax()', 'Kilometers', 'Price(TL)'
+# Log dönüşümüü yapılması gereken değişkenler = Price(TL), Kilometers, EngineSize, EnginePower, VehicleTax()
 
-df['DamageCost_log'] = np.log1p(df['DamageCost'])
-df['VehicleTax_log'] = np.log1p(df['VehicleTax()'])
-df['Kilometers_log'] = np.log1p(df['Kilometers'])
-df['Price_log'] = np.log1p(df['Price(TL)'])
+df['NEW_Price_log'] = np.log1p(df['Price(TL)'])
+df['NEW_Kilometers_log'] = np.log1p(df['Kilometers'])
+df['NEW_EngineSize_log'] = np.log1p(df['EngineSize'])
+df['NEW_EnginePower_log'] = np.log1p(df['EnginePower'])
+df['NEW_VehicleTax_log'] = np.log1p(df['VehicleTax()'])
+
 
 # Burada log dönüşümde kullanılan değişkenler veri setinden çıkartılabilinir
-# ama hem orijinal hem de log versiyonları karşılaştırmak istediğimiz için şimdilik silmiyoruz.
-# df.drop(['DamageCost', 'VehicleTax(TL)', 'Kilometers', 'Price(TL)'], axis=1, inplace=True)
+# ama hem orijinal hem de log versiyonları karşılaştırmak istediğimiz için ve
+# eski değişkenlerden feature extraction yapmak için şimdilik silmiyoruz.
+# Log dönüşümü outlier işlemide yapar ancak Outlier baskılaması olmayan değişkenleri outlier baskılama işlemi yapıyoruz.
 
-numerical_cols2 = ['DamageCost_log', 'VehicleTax_log', 'Kilometers_log', 'Price_log']
+# sayısal değişkenlerimizi yeniden çağıralım
+# yeni oluşturduğumuz log dönüşümlü değerlerimizde de outlier olmuş olabilir.
+numerical_cols  = [col for col in df.columns if df[col].dtypes not in ['O', 'datetime64[ns]']]
 
-for col in numerical_cols2:
+for col in numerical_cols:
         print(col, check_outliers(df, col))
+        if check_outliers(df, col):
+            replace_with_threshold(df,col)
 
-replace_with_threshold(df,'Kilometers_log')
+df.head()
+###########################
+# Feature Extraction
+##########################
 
+# Address ---> NEW_District
+df['NEW_District'] = df['Address'].apply(lambda x: x.split()[-1])
+df.drop('Address', axis=1, inplace=True)
+
+# ListingDate ---> NEW_DaysSinceListing
+current_date = datetime.now()
+df['NEW_DaysSinceListing'] = (current_date - df['ListingDate']).dt.days
+# df.drop('ListingDate', axis=1, inplace=True)
+
+# Year ---> NEW_CarAge
+df['NEW_CarAge'] = (current_date.date().year - df['Year']).astype(int)
+
+# PaintAndPartsCondition ---> NEW_NumOriginalParts, NEW_NumLocalPaintedParts, NEW_NumPaintedParts, NEW_NumChangedParts, NEW_NumUnknownParts
+parts_list = [
+    "Sağ Ön Kapı", "Sağ Arka Kapı", "Sol Ön Kapı", "Sol Arka Kapı",
+    "Sağ Ön Çamurluk", "Sol Ön Çamurluk", "Sağ Arka Çamurluk", "Sol Arka Çamurluk",
+    "Arka Kaput", "Motor Kaputu", "Tavan", "Ön Tampon", "Arka Tampon"
+]
+def count_parts_by_category(text):
+    categories = ['Orjinal', 'Lokal boyalı', 'Boyalı', 'Değişmiş', 'Belirtilmemiş']
+    result = dict.fromkeys([c + "_Count" for c in categories], 0)
+
+    for i, cat in enumerate(categories):
+        try:
+            start = text.index(cat) + len(cat)
+            end = text.index(categories[i + 1]) if i + 1 < len(categories) else len(text)
+            segment = text[start:end]
+            count = sum(1 for part in parts_list if part in segment)
+            result[cat + "_Count"] = count
+        except ValueError:
+            result[cat + "_Count"] = 0
+
+    return pd.Series(result)
+df[['NEW_NumOriginalParts', 'NEW_NumLocalPaintedParts', 'NEW_NumPaintedParts', 'NEW_NumChangedParts', 'NEW_NumUnknownParts']] = df['PaintAndPartsCondition'].apply(count_parts_by_category)
+df.drop('PaintAndPartsCondition', axis=1, inplace=True)
+
+
+# TramerCondition ---> NEW_HasDamage, NEW_HasHighDamage, NEW_DamageCost
+df['TramerCondition'] = df['TramerCondition'].astype(str).str.strip()
+
+def detect_damage(x):
+    if pd.isna(x):  # Gerçek NaN
+        return -1
+    x = str(x).strip().lower()
+    if x == 'tutarı yok':
+        return 0
+    elif 'ağır hasar' in x or any(char.isdigit() for char in x):
+        return 1
+    elif 'tutarı belirtilmemiş' in x or x == '' or x == 'nan':
+        return -1
+    else:
+        return 1  # Emin olunamayan ama boş olmayan değerler
+df['NEW_HasDamage'] = df['TramerCondition'].apply(detect_damage)
+
+df['NEW_HasHighDamage'] = df['TramerCondition'].apply(
+    lambda x: 1 if isinstance(x, str) and 'ağır hasar' in x.lower() else 0)
+
+def extract_cost(val):
+    if isinstance(val, str):
+        # Sayı içeriyorsa ayıkla
+        match = re.search(r'\d[\d\.]*', val)
+        if match:
+            return float(match.group(0).replace('.', '').replace(',', '.'))
+    return np.nan
+df['NEW_DamageCost'] = df['TramerCondition'].apply(extract_cost)
+df.drop('TramerCondition', axis=1, inplace=True)
+
+# Kilometers --->  NEW_KmPerYear, NEW_KmCategory
+# df['Kilometers'].describe([0.05, 0.1, 0.25, 0.5, 0.75, 0.90, 0.95])
+df['NEW_KmPerYear'] = df['Kilometers'] / (df['NEW_CarAge'] + 1)
+
+bins = [0, 50000, 100000, 150000, 200000, 300000, np.inf]
+labels = ["0-50K", "50-100K", "100-150K", "150-200K", "200-300K", "300K+"]
+df["NEW_KmCategory"] = pd.cut(df["Kilometers"], bins=bins, labels=labels)
+df["NEW_KmCategory"] = df["NEW_KmCategory"].astype("O")
+
+# Brand + Price(TL) ---> NEW_AvgPricePerBrand
+df['NEW_AvgPricePerBrandSeries'] = df.groupby(['Brand', 'Series'])['Price(TL)'].transform('mean')
+
+# Brand + Price(TL) ---> NEW_AvgKmPerBrandSeries
+df['NEW_AvgKmPerBrandSeries'] = df.groupby(['Brand', 'Series'])['Kilometers'].transform('mean')
+
+
+df['NEW_DistrictAvgPrice'] = df.groupby('NEW_District')['Price(TL)'].transform('mean')
+
+
+
+#######  Yeni oluşan değişkenlerdeki eksik değerleri doldurma ###########
+df.isna().sum()
+
+# NEW_DamageCost
+df.loc[df['NEW_HasDamage'] == 1, 'NEW_DamageCost'].fillna(
+    df[df['NEW_HasDamage'] == 1].groupby(['Brand', 'Series', 'Year', 'EngineSize'])['NEW_DamageCost'].transform('mean'), inplace=True)
+
+df.loc[(df['NEW_HasDamage'] == 0) & (df['NEW_DamageCost'].isna()), 'NEW_DamageCost'] = 0
+
+df.loc[(df['NEW_HasDamage'] == -1) & (df['NEW_DamageCost'].isna()), 'NEW_DamageCost'] = df['NEW_DamageCost'].mean()
 
 
 ########################
@@ -665,24 +728,64 @@ def one_hot_encoder(dataframe, categorical_cols, drop_first=True):
 # DriveType(3 sınıf var), TradeInStatus(3 sınıf var),
 # SellerType(4 sınıf var), Brand(10 sınıf var), BodyType(7 sınıf var)
 
-columns_to_oneHotEncode = ['Brand','GearType', 'FuelType', 'DriveType',
-                     'TradeInStatus', 'SellerType',  'BodyType', 'TradeInStatus', 'SellerType']
+columns_to_oneHotEncode = [col for col in df.columns if df[col].dtypes == 'O' and df[col].nunique() < 11]
 
 df = one_hot_encoder(df, columns_to_oneHotEncode)
 
 
 # Rare encode edilecek sütunlar
-# District(468 sınıf var), Color(31 sınıf var),
-# Series(123 sınıf var), Model(1139 sınıf var)
-columns_to_rareEncode = ['Model', 'Series', 'District', 'Color']
+# District(468 sınıf var), Color(24 sınıf var),
+# Series(117 sınıf var), Model(1079 sınıf var)
+columns_to_rareEncode = ['Model', 'Series', 'NEW_District', 'Color']
 for col in columns_to_rareEncode:
     df = rare_encoder(df,col)
 
 
 # Frequency encoder uygulanacak değişkenler
-# City(82 sınıf var)
+# City(80 sınıf var)
 # Burada rare encode ettiğimiz sütunları frequency encode işlemi uyguladık bunun yerine one hot encode işlemi de uygulanabilirdi.
-columns_to_freqEncode = ['Model', 'Series', 'District', 'Color', 'City']
+columns_to_freqEncode = ['Model', 'Series', 'NEW_District', 'Color', 'City']
 for col in columns_to_freqEncode:
     df = frequency_encoder(df,col)
 
+# Burada yola sadece log dönüşümü yaptığımız değişkenler ile devam edebilirz ya da
+# dönüşüm yapttığımız değişkenelerin kendilerinide tuttarak model deki etkilerini incelyebiliriz.
+
+#df.drop(['Price(TL)', 'Kilometers', 'EngineSize',  'EnginePower',  'VehicleTax()'], axis=1, inplace=True)
+
+###############################
+# Scale İşlemleri
+###############################
+# Burada kuullanacağımız modellere göre scale işlemi yapılabilir.
+# Biz hem ağaç modelleri hemde linear modeller kullanacapımız için veriyi hem scale işlemi olan halini hemde olmayan halini alacağız.
+
+# Log dönşümü, Bool türünde ve Object türünde olan değişkenler hariç diğer değişkenler
+columns_to_scale = ['Price(TL)', 'Kilometers', 'EngineSize', 'EnginePower','NEW_DamageCost',
+                      'VehicleTax()','NEW_KmPerYear', 'NEW_AvgPricePerBrandSeries',
+                      'NEW_AvgKmPerBrandSeries', 'NEW_DistrictAvgPrice']
+
+def scale_features(df, columns_to_scale):
+    scaler = StandardScaler()
+    df_scaled = df.copy()
+
+    df_scaled[columns_to_scale] = scaler.fit_transform(df_scaled[columns_to_scale])
+
+    return df_scaled
+
+
+# Burada Linear model kullanacağımız için Eksik verileri doldurmamız gerekiyor, Karar ağaçları eksik değerler ile çalışabilir.
+
+df_scale = df.copy()
+df_scale.loc[(df_scale['NEW_HasDamage'] == -1) & (df_scale['NEW_DamageCost'].isna()), 'NEW_DamageCost'] = df_scale['NEW_DamageCost'].mean()
+df_scale = scale_features(df_scale, columns_to_scale)
+
+
+# Modelden önce ListingDate değişeknini çıkartalım !!!!!
+df.drop(['ListingDate'], axis=1, inplace=True)
+
+df.head()
+df_scale.head()
+
+# Datayı dışarı aktaralım.
+df.to_csv('dataset/Model_data_decision_trees.csv', index=False)
+df_scale.to_csv('dataset/Model_data_Linear.csv', index=False)
