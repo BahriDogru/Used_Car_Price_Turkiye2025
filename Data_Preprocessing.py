@@ -776,7 +776,7 @@ def scale_features(df, columns_to_scale):
 # Burada Linear model kullanacağımız için Eksik verileri doldurmamız gerekiyor, Karar ağaçları eksik değerler ile çalışabilir.
 
 df_scale = df.copy()
-df_scale.loc[(df_scale['NEW_HasDamage'] == -1) & (df_scale['NEW_DamageCost'].isna()), 'NEW_DamageCost'] = df_scale['NEW_DamageCost'].mean()
+df_scale['NEW_DamageCost'].fillna(df_scale['NEW_DamageCost'].median(), inplace=True)
 df_scale = scale_features(df_scale, columns_to_scale)
 
 
