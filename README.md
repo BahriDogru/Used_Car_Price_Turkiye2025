@@ -54,6 +54,22 @@ The dataset was compiled by scraping publicly available used car listings from a
 - ✅ Model evaluation and comparison
 - ✅ Streamlit app for deployment
 
+## 📊 Model Performance
+
+The final model was evaluated across training, validation, and test datasets. The primary metric used for evaluation was **R² Score**, supported by **Root Mean Squared Error (RMSE)** for better interpretability in real currency (Turkish Lira).
+
+| Dataset     | R² Score | RMSE (₺)       |
+|-------------|----------|----------------|
+| Train       | 0.9543   | —              |
+| Validation  | 0.9142   | 36,647 ₺      |
+| Test        | 0.8970   | 30,585 ₺      |
+
+✅ The model demonstrates strong generalization capabilities on unseen data with a **test R² score of ~0.89**, indicating good predictive performance.
+
+🔍 Note: Price predictions were made on a **log-transformed target variable** to reduce skewness and handle outliers. After prediction, results were converted back to actual currency using inverse transformation.
+
+
+
 ## 🛠️ How to Use
 
 ```bash
