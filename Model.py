@@ -16,8 +16,8 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 pd.set_option("display.width", 500)
 pd.set_option("display.max_columns", 500)
 
-df = pd.read_csv('dataset/Model_data_decision_trees.csv')
-df_scale = pd.read_csv('dataset/Model_data_Linear.csv')
+
+df = pd.read_csv('dataset/*******.csv')
 
 ###############################################################
 # # Tüm modeller (Decision Tress & Linear Models) df_scale ile
@@ -56,9 +56,8 @@ def compare_models(X, y, random_state=42, cv=5):
     return pd.DataFrame(results).sort_values("R2 Score", ascending=False).reset_index(drop=True)
 
 
-
-X = df_scale.drop(['NEW_Price_log','Price(TL)'], axis=1)
-y = df_scale["NEW_Price_log"]
+X = df.drop(['NEW_Price_log','Price(TL)'], axis=1)
+y = df["NEW_Price_log"]
 
 results = compare_models(X, y)
 print(results)
@@ -137,17 +136,17 @@ X_train, X_val, y_train, y_val = train_test_split(X,y , test_size=0.20, random_s
 
 ##  RandomizedSearchCV Kullanımı
 param_dist = {
-    'learning_rate': [0.01, 0.05, 0.1],
-    'depth': [4, 6, 8, 10],
+    'learning_rate': [0.01, 0.05, 0.08, 0.09, 0.1],
+    'depth': [4, 6, 8, 10, 11 ,14],
     'l2_leaf_reg': [1, 3, 5, 7, 9],
-    'iterations': [100, 200, 300],
+    'iterations': [400, 500, 600, 700, 900, 1000, 1100],
     'bagging_temperature': [0, 0.5, 1],
 }
 
 random_search = RandomizedSearchCV(
     estimator=catboost_model,
     param_distributions=param_dist,
-    n_iter=20,
+    n_iter=30,
     cv=5,
     scoring='r2',
     random_state=42,
@@ -159,11 +158,11 @@ print(random_search.best_params_)
 print(random_search.best_score_)
 # 0.9552958071105655
 
-# {'learning_rate': 0.1,
-#       'l2_leaf_reg': 7,
-#       'iterations': 300,
-#       'depth': 6,
-#       'bagging_temperature': 0}
+# {'learning_rate': 0.05,
+# 'l2_leaf_reg': 7,
+# 'iterations': 900,
+# 'depth': 6,
+# 'bagging_temperature': 1}
 
 
 cv_scores = cross_val_score(catboost_model, X, y, cv=5, scoring='r2')
@@ -176,10 +175,10 @@ print("Mean CV R2:", cv_scores.mean())
 
 ##  GridSearchCV Kullanımı
 grid_params = {
-    'learning_rate': [0.08, 0.09, 0.1, 0.11],
-    'depth': [5, 6, 7],
+    'learning_rate': [0.04, 0.05, 0.06, 0.7],
+    'depth': [6, 7, 8, 9],
     'l2_leaf_reg': [6, 7, 8, 9],
-    'iterations': [300, 400, 500]
+    'iterations': [800, 900, 950, 1000]
 }
 
 grid_search = GridSearchCV(
@@ -192,7 +191,7 @@ grid_search = GridSearchCV(
 
 grid_search.fit(X_train, y_train)
 print(grid_search.best_params_)
-# {'depth': 5, 'iterations': 500, 'l2_leaf_reg': 6, 'learning_rate': 0.08}
+# {'depth': 6, 'iterations': 950, 'l2_leaf_reg': 7, 'learning_rate': 0.06}
 
 
 

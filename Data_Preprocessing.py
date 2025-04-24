@@ -14,17 +14,23 @@ pd.set_option("display.max_columns", 500)
 pd.set_option('display.float_format', '{:.0f}'.format) # çıktılarda sayıları ondalıklı kısmı olmadan göstermeni sağlar.
 # pd.reset_option('display.float_format') # ondalıklı gösterim için bu kullanılır.
 
-df = pd.read_csv("dataset/car_price.csv")
+df = pd.read_csv("dataset/train_data.csv", encoding="ISO-8859-9")
+df.columns = ['Title', 'Address', 'City', 'Price(TL)', 'ListingID', 'ListingDate', 'Brand', 'Series', 'Model', 'Year', 'Kilometers', 'GearType', 'FuelType', 'BodyType', 'Color', 'EngineSize', 'EnginePower', 'DriveType', 'PaintAndPartsCondition', 'TradeInStatus', 'SellerType', 'VehicleTax(TL)', 'TramerCondition']
 df.info()
 df.head()
 
-# Tüm sütunlardaki string değerlerin başındaki ve sonundaki boşlukları temizle
-df = df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
+# Tüm sütunlardaki string değerlerin başındaki ve sonundaki boşlukları \n, \r, \t gibi karakterler temizle
+def clean_text_columns(df):
+    for col in df.select_dtypes(include=["object"]).columns:
+        df[col] = df[col].astype(str).apply(lambda x: x.replace("\n", " ").replace("\r", " ").replace("\t", " ").strip())
+    return df
+
+df = clean_text_columns(df)
 
 # remove Title and ListteningID
 drop_list = ['Title', 'ListingID']
 df = df.drop(drop_list, axis=1)
-
+df = df.drop_duplicates()
 ######################
 ## Dtype düzeltme
 ######################
@@ -35,7 +41,8 @@ df['Price(TL)'] = df['Price(TL)'].str.replace(' TL', '', regex=False)  # ' TL' k
 df['Price(TL)'] = df['Price(TL)'].str.replace(',', '.', regex=False)  # eğer ondalık virgül varsa noktaya çevir
 df['Price(TL)'] = pd.to_numeric(df['Price(TL)'], errors='coerce')
 
-
+# Year değişkenini sayısala döndürme
+df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
 
 # ListininDate
 month_map = {
@@ -83,7 +90,7 @@ df.info()
 ###########################
 # Edit Variables - Missing Values
 ##########################
-
+df.isna().sum()
 def remove_nan_col(dataframe):
     """
       Veri setindeki her gözlemdeki (satırdaki) NaN değerlerini sayar ve
@@ -113,29 +120,43 @@ df = remove_nan_col(df)
 
 # BodyType
 list_BodyType = ['Hatchback/5', 'Sedan', 'Coupe', 'Hatchback/3','Roadster','Station wagon','MPV']
-df = df[df["BodyType"].isin(list_BodyType)]
+df["BodyType"] = df["BodyType"].where(df["BodyType"].isin(list_BodyType), np.nan)
+df['BodyType'] = df.groupby(['Brand', 'Series', 'Model'])['BodyType']\
+                   .transform(lambda x: x.fillna(x.mode()[0] if not x.mode().empty else np.nan))
+df['BodyType'].fillna(df['BodyType'].mode()[0], inplace=True)
 
 # DriveType
 list_DriveType = ['Önden Çekiş', '4WD (Sürekli)','Arkadan İtiş']
-df = df[df["DriveType"].isin(list_DriveType)]
+df["DriveType"] = df["DriveType"].where(df["DriveType"].isin(list_DriveType), np.nan)
+df['DriveType'] = df.groupby(['Brand', 'Series', 'Model'])['DriveType']\
+                   .transform(lambda x: x.fillna(x.mode()[0] if not x.mode().empty else np.nan))
+df['DriveType'].fillna(df['DriveType'].mode()[0], inplace=True)
+
 
 # FuelType
 list_FuelType = ['Benzin', 'Dizel', 'Hibrit', 'LPG & Benzin','Elektrik']
-df = df[df["FuelType"].isin(list_FuelType)]
+df["FuelType"] = df["FuelType"].where(df["FuelType"].isin(list_FuelType), np.nan)
+df['FuelType'] = df.groupby(['Brand', 'Series', 'Model'])['FuelType']\
+                   .transform(lambda x: x.fillna(x.mode()[0] if not x.mode().empty else np.nan))
+df['FuelType'].fillna(df['FuelType'].mode()[0], inplace=True)
 
-
-#  TradeInStatus, SellerType missing values
-# print(df['TradeInStatus'].value_counts(dropna=False))
-# print(df['SellerType'].value_counts(dropna=False))
-
-df['TradeInStatus'].replace('', np.nan, inplace=True)
-df['TradeInStatus'].fillna('Belirtilmemiş', inplace=True)
-
-df['SellerType'].replace('', np.nan, inplace=True)
+# SellerType
+list_SellerType = ['Belirtilmemiş', 'Galeriden', 'Sahibinden', 'Yetkili Bayiden']
+df["SellerType"] = df["SellerType"].where(df["SellerType"].isin(list_SellerType), np.nan)
 df['SellerType'].fillna('Belirtilmemiş', inplace=True)
 
+# TradeInStatus
+list_TradeInStatus = ['Takasa Uygun','Takasa Uygun Değil','Belirtilmemiş']
+df["TradeInStatus"] = df["TradeInStatus"].where(df["TradeInStatus"].isin(list_TradeInStatus), np.nan)
+df['TradeInStatus'].fillna('Belirtilmemiş', inplace=True)
+
 # EngineSize
-df["EngineSize"] = df.groupby("Brand")["EngineSize"].transform(lambda x: x.fillna(x.median()))
+df["EngineSize"] = df.groupby(["Brand", "Model"])["EngineSize"].transform(lambda x: x.fillna(x.median()))
+df['EngineSize'].fillna(df['EngineSize'].median(), inplace=True)
+
+# EnginePower
+df["EnginePower"] = df.groupby(["Brand", "Model"])["EnginePower"].transform(lambda x: x.fillna(x.median()))
+df['EnginePower'].fillna(df['EnginePower'].median(), inplace=True)
 
 
 # VehicleTax() ---> Missing Values
@@ -500,11 +521,21 @@ def fill_missing_mtv(df):
     Returns:
         pd.DataFrame: MTV değerleri güncellenmiş DataFrame.
     """
-    df['VehicleTax()'] = df.apply(lambda row: calculate_mtv(row['EngineSize'], row['Year'], row['Price(TL)']), axis=1)
+
+    def safe_calculate(row):
+        try:
+            year = int(row['Year'])
+            return calculate_mtv(row['EngineSize'], year, row['Price(TL)'])
+        except (ValueError, TypeError):
+            return np.nan  # Sayıya çevrilemeyen veya eksik Year için NaN döner
+
+    df['VehicleTax(TL)'] = df.apply(safe_calculate, axis=1)
     return df
+
 
 # Fonksiyonu kullanarak eksik MTV değerlerini doldur
 df = fill_missing_mtv(df)
+
 
 df.isna().sum()
 df.head()
@@ -537,13 +568,14 @@ for col in numerical_cols:
         print(col, check_outliers(df, col))
 
 
-for col in numerical_cols:
-    sns.histplot(x=df[col].dropna(), kde=True, bins=50)
-    plt.title(f"{col} Distribution")
-    plt.show()
+#for col in numerical_cols:
+#     sns.histplot(x=df[col].dropna(), kde=True, bins=50)
+#     plt.title(f"{col} Distribution")
+#     plt.show()
+#
+#     sk = skew(df[col].dropna())
+#     print(f"{col} için çarpıklık (skewness): {sk:.2f}")
 
-    sk = skew(df[col].dropna())
-    print(f"{col} için çarpıklık (skewness): {sk:.2f}")
 def plot_numerical_distributions(df, numerical_cols):
     """
     Verilen sayısal sütunların histogram ve çarpıklık değerlerini subplotlar halinde gösterir.
@@ -551,7 +583,9 @@ def plot_numerical_distributions(df, numerical_cols):
     Args:
         df (pd.DataFrame): Veri çerçevesi.
         numerical_cols (list): Histogramları çizilecek sayısal sütunların listesi.
+        skew_columns (list): skewness değeri -0.5 ile 0.5 arasında olmayan sütunların listesi
     """
+    skew_columns = []
     num_cols = len(numerical_cols)
     num_rows = (num_cols + 1) // 2  # Satır sayısını ayarla
     fig, axes = plt.subplots(num_rows, 2, figsize=(20, 6 * num_rows))
@@ -566,26 +600,29 @@ def plot_numerical_distributions(df, numerical_cols):
         sk = skew(df[col].dropna())
         print(f"{col} için çarpıklık (skewness): {sk:.2f}")
 
+        if sk > 1 or sk < -1:
+            skew_columns.append(col)
+
     # Kullanılmayan subplotları temizle
     if num_cols % 2 != 0:
         fig.delaxes(axes[-1])
 
+
     plt.tight_layout()
     plt.show()
-plot_numerical_distributions(df,numerical_cols)
+    return skew_columns
+
+skew_list = plot_numerical_distributions(df,numerical_cols)
 
 #Eğer skewness değeri:
 # > +1 → sağa çarpık (log dönüşüm düşünülebilinir)
 # < -1 → sola çarpık (log dönüşüm düşünülebilinir)
 # -0.5 ile +0.5 arasında → simetrik sayılır, dönüşüm şart değil
 
-# Log dönüşümüü yapılması gereken değişkenler = Price(TL), Kilometers, EngineSize, EnginePower, VehicleTax()
+# Log dönüşümüü yapılması gereken değişkenler = skew_list
 
-df['NEW_Price_log'] = np.log1p(df['Price(TL)'])
-df['NEW_Kilometers_log'] = np.log1p(df['Kilometers'])
-df['NEW_EngineSize_log'] = np.log1p(df['EngineSize'])
-df['NEW_EnginePower_log'] = np.log1p(df['EnginePower'])
-df['NEW_VehicleTax_log'] = np.log1p(df['VehicleTax()'])
+for col in skew_list:
+    df['NEW_'+col+'_log'] = np.log1p(df[col])
 
 
 # Burada log dönüşümde kullanılan değişkenler veri setinden çıkartılabilinir
@@ -617,7 +654,7 @@ df['NEW_DaysSinceListing'] = (current_date - df['ListingDate']).dt.days
 # df.drop('ListingDate', axis=1, inplace=True)
 
 # Year ---> NEW_CarAge
-df['NEW_CarAge'] = (current_date.date().year - df['Year']).astype(int)
+df['NEW_CarAge'] = (current_date.date().year - df['Year'])
 
 # PaintAndPartsCondition ---> NEW_NumOriginalParts, NEW_NumLocalPaintedParts, NEW_NumPaintedParts, NEW_NumChangedParts, NEW_NumUnknownParts
 parts_list = [
@@ -645,13 +682,11 @@ df.drop('PaintAndPartsCondition', axis=1, inplace=True)
 
 
 # TramerCondition ---> NEW_HasDamage, NEW_HasHighDamage, NEW_DamageCost
-df['TramerCondition'] = df['TramerCondition'].astype(str).str.strip()
-
 def detect_damage(x):
     if pd.isna(x):  # Gerçek NaN
         return -1
-    x = str(x).strip().lower()
-    if x == 'tutarı yok':
+    x = str(x).strip().lower().replace('\n', '').replace('\r', '')
+    if 'tutarı yok' in x or x == 'yok':
         return 0
     elif 'ağır hasar' in x or any(char.isdigit() for char in x):
         return 1
@@ -662,7 +697,7 @@ def detect_damage(x):
 df['NEW_HasDamage'] = df['TramerCondition'].apply(detect_damage)
 
 df['NEW_HasHighDamage'] = df['TramerCondition'].apply(
-    lambda x: 1 if isinstance(x, str) and 'ağır hasar' in x.lower() else 0)
+    lambda x: 1 if isinstance(x, str) and 'ağır hasar' in x.lower().replace('\n', '').replace('\r', '') else 0)
 
 def extract_cost(val):
     if isinstance(val, str):
@@ -675,7 +710,6 @@ df['NEW_DamageCost'] = df['TramerCondition'].apply(extract_cost)
 df.drop('TramerCondition', axis=1, inplace=True)
 
 # Kilometers --->  NEW_KmPerYear, NEW_KmCategory
-# df['Kilometers'].describe([0.05, 0.1, 0.25, 0.5, 0.75, 0.90, 0.95])
 df['NEW_KmPerYear'] = df['Kilometers'] / (df['NEW_CarAge'] + 1)
 
 bins = [0, 50000, 100000, 150000, 200000, 300000, np.inf]
@@ -705,7 +739,8 @@ df.loc[(df['NEW_HasDamage'] == 0) & (df['NEW_DamageCost'].isna()), 'NEW_DamageCo
 
 df.loc[(df['NEW_HasDamage'] == -1) & (df['NEW_DamageCost'].isna()), 'NEW_DamageCost'] = df['NEW_DamageCost'].mean()
 
-
+df['NEW_DamageCost'].fillna(df['NEW_DamageCost'].median(), inplace=True)
+df.dropna(inplace=True)
 ########################
 # Encode İşlemleri
 ########################
@@ -732,11 +767,10 @@ columns_to_oneHotEncode = [col for col in df.columns if df[col].dtypes == 'O' an
 
 df = one_hot_encoder(df, columns_to_oneHotEncode)
 
-
 # Rare encode edilecek sütunlar
-# District(468 sınıf var), Color(24 sınıf var),
+# NEW_District(468 sınıf var), Color(24 sınıf var),
 # Series(117 sınıf var), Model(1079 sınıf var)
-columns_to_rareEncode = ['Model', 'Series', 'NEW_District', 'Color']
+columns_to_rareEncode = ['Model', 'Series', 'NEW_District', 'Color', 'Brand']
 for col in columns_to_rareEncode:
     df = rare_encoder(df,col)
 
@@ -744,7 +778,7 @@ for col in columns_to_rareEncode:
 # Frequency encoder uygulanacak değişkenler
 # City(80 sınıf var)
 # Burada rare encode ettiğimiz sütunları frequency encode işlemi uyguladık bunun yerine one hot encode işlemi de uygulanabilirdi.
-columns_to_freqEncode = ['Model', 'Series', 'NEW_District', 'Color', 'City']
+columns_to_freqEncode = ['Model', 'Series', 'NEW_District', 'Color', 'Brand', 'City']
 for col in columns_to_freqEncode:
     df = frequency_encoder(df,col)
 
@@ -759,9 +793,13 @@ for col in columns_to_freqEncode:
 # Burada kuullanacağımız modellere göre scale işlemi yapılabilir.
 # Biz hem ağaç modelleri hemde linear modeller kullanacapımız için veriyi hem scale işlemi olan halini hemde olmayan halini alacağız.
 
+
+# Scale işleminden önce ListingDate değişeknini çıkartalım !!!!!
+df.drop(['ListingDate'], axis=1, inplace=True)
+
 # Log dönşümü, Bool türünde ve Object türünde olan değişkenler hariç diğer değişkenler
-columns_to_scale = ['Price(TL)', 'Kilometers', 'EngineSize', 'EnginePower','NEW_DamageCost',
-                      'VehicleTax()','NEW_KmPerYear', 'NEW_AvgPricePerBrandSeries',
+columns_to_scale = ['Kilometers', 'EngineSize', 'EnginePower','NEW_DamageCost',
+                      'VehicleTax(TL)','NEW_KmPerYear', 'NEW_AvgPricePerBrandSeries',
                       'NEW_AvgKmPerBrandSeries', 'NEW_DistrictAvgPrice']
 
 def scale_features(df, columns_to_scale):
@@ -776,16 +814,13 @@ def scale_features(df, columns_to_scale):
 # Burada Linear model kullanacağımız için Eksik verileri doldurmamız gerekiyor, Karar ağaçları eksik değerler ile çalışabilir.
 
 df_scale = df.copy()
-df_scale['NEW_DamageCost'].fillna(df_scale['NEW_DamageCost'].median(), inplace=True)
 df_scale = scale_features(df_scale, columns_to_scale)
 
 
-# Modelden önce ListingDate değişeknini çıkartalım !!!!!
-df.drop(['ListingDate'], axis=1, inplace=True)
 
-df.head()
+#df.head()
 df_scale.head()
 
 # Datayı dışarı aktaralım.
-df.to_csv('dataset/Model_data_decision_trees.csv', index=False)
-df_scale.to_csv('dataset/Model_data_Linear.csv', index=False)
+#df.to_csv('dataset/test_data_decision_trees.csv', index=False)
+df_scale.to_csv('dataset/test_data_new.csv', index=False)
