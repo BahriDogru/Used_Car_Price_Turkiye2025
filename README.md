@@ -12,7 +12,7 @@ The main objective of this project is to predict the `Price(TRY)` of a car using
 The dataset was compiled by scraping publicly available used car listings from a popular car market in Turkey. It contains extensive details about vehicles, sellers and their geographical locations. After extensive cleaning and pre-processing, the dataset is structured and ready to be used for vehicle price prediction and machine learning tasks. The dataset presented here is in its raw form without any data pre-processing. For the cleaned version of the dataset, you can use the Preprocessing_pipeline.py file or you can find it on my kaggle page.
 
 
-👉 **[Download Dataset](https://www.kaggle.com/work/datasets)**
+👉 **[Download Dataset](https://www.kaggle.com/datasets/bahridgr/used-car-prices-in-trkiye-2025-entr)**
 
 ## 🧩 Features (Variables)
 
